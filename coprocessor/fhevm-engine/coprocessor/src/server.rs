@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::num::NonZeroUsize;
 use std::str::FromStr;
@@ -629,8 +629,6 @@ impl CoprocessorService {
         span.end();
 
         // to insert to db
-        let mut computation_buckets: Vec<PrimitiveDateTime> =
-            Vec::with_capacity(sorted_computations.len());
         let mut computations_inputs: Vec<Vec<Vec<u8>>> =
             Vec::with_capacity(sorted_computations.len());
         let mut computations_outputs: Vec<Vec<u8>> = Vec::with_capacity(sorted_computations.len());
@@ -666,19 +664,12 @@ impl CoprocessorService {
             check_fhe_operand_types(comp.operation, &this_comp_inputs, &is_scalar_op_vec)
                 .map_err(CoprocessorError::FhevmError)?;
 
-            // Sort computation into its bucket
-            let inputs = if is_computation_scalar {
-                vec![this_comp_inputs[0].as_ref()]
-            } else {
-                this_comp_inputs.iter().collect()
-            };
-            computation_buckets
-                .push(sort_computation_into_bucket(&comp.output_handle, &inputs).await);
-
             computations_inputs.push(this_comp_inputs);
             are_comps_scalar.push(is_computation_scalar);
         }
 
+        let computation_buckets: Vec<PrimitiveDateTime> =
+            sort_computation_into_bucket(&sorted_computations).await;
         let mut tx_span = tracer.child_span("db_transaction");
         let mut trx = self
             .pool
@@ -910,33 +901,30 @@ impl CoprocessorService {
     }
 }
 
-lazy_static! {
-    pub static ref BUCKET_CACHE: std::sync::Arc<tokio::sync::RwLock<lru::LruCache<Vec<u8>, PrimitiveDateTime>>> =
-        std::sync::Arc::new(tokio::sync::RwLock::new(lru::LruCache::new(
-            std::num::NonZeroUsize::new(128).unwrap(),
-        )));
-}
-
 async fn sort_computation_into_bucket(
-    output: &[u8],
-    dependencies: &Vec<&Vec<u8>>,
-) -> PrimitiveDateTime {
-    // If any input dependence is a match, return its bucket. This
-    // computation is in a connected component with other ops in
-    // this bucket
-    let mut bucket_cache = BUCKET_CACHE.write().await;
-    for d in dependencies {
-        // We peek here as the reuse is less likely than the use
-        // of the new handle which we add
-        if let Some(ce) = bucket_cache.peek(*d).cloned() {
-            bucket_cache.put(output.to_owned(), ce);
-            return ce;
+    computations: &[&crate::server::coprocessor::AsyncComputation],
+) -> Vec<PrimitiveDateTime> {
+    let t = || -> PrimitiveDateTime {
+        let t = OffsetDateTime::now_utc();
+        PrimitiveDateTime::new(t.date(), t.time())
+    };
+    let mut res: Vec<PrimitiveDateTime> = vec![PrimitiveDateTime::MIN; computations.len()];
+    let mut cache: HashMap<Vec<u8>, PrimitiveDateTime> = HashMap::with_capacity(computations.len());
+    for (idx, comp) in computations.iter().enumerate() {
+        let output = &comp.output_handle;
+        for ih in comp.inputs.iter() {
+            if let Some(Input::InputHandle(input)) = &ih.input {
+                if let Some(ce) = cache.get(input).cloned() {
+                    cache.insert(output.to_owned(), ce);
+                    res[idx] = ce;
+                    break;
+                }
+            }
         }
+        // If this computation is not linked to any others, assign it
+        // to a new empty bucket
+        res[idx] = t();
+        cache.insert(output.to_owned(), res[idx]);
     }
-    // If this computation is not linked to any others, assign it
-    // to a new empty bucket
-    let t = OffsetDateTime::now_utc();
-    let t = PrimitiveDateTime::new(t.date(), t.time());
-    bucket_cache.put(output.to_owned(), t);
-    t
+    res
 }

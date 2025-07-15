@@ -146,7 +146,11 @@ impl Database {
         log: &alloy::rpc::types::Log<TfheContractEvents>,
     ) -> Result<(), SqlxError> {
         let bucket = self
-            .sort_computation_into_bucket(result, dependencies_handles)
+            .sort_computation_into_bucket(
+                result,
+                dependencies_handles,
+                &log.transaction_hash,
+            )
             .await;
         let dependencies_handles = dependencies_handles
             .iter()
@@ -175,7 +179,11 @@ impl Database {
         log: &alloy::rpc::types::Log<TfheContractEvents>,
     ) -> Result<(), SqlxError> {
         let bucket = self
-            .sort_computation_into_bucket(result, dependencies)
+            .sort_computation_into_bucket(
+                result,
+                dependencies,
+                &log.transaction_hash,
+            )
             .await;
         let dependencies =
             dependencies.iter().map(|d| d.to_vec()).collect::<Vec<_>>();
@@ -212,9 +220,10 @@ impl Database {
                 dependencies,
                 fhe_operation,
                 is_scalar,
-                schedule_order
+                schedule_order,
+                transaction_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
             ON CONFLICT (tenant_id, output_handle) DO NOTHING
             "#,
             tenant_id as i32,
@@ -222,7 +231,12 @@ impl Database {
             &dependencies,
             fhe_operation as i16,
             is_scalar,
-            bucket
+            bucket,
+            if let Some(txh) = log.transaction_hash {
+                Some(txh.to_vec())
+            } else {
+                None
+            }
         );
         query.execute(&self.pool).await.map(|_| ())
     }
@@ -231,25 +245,43 @@ impl Database {
         &self,
         output: &Handle,
         dependencies: &[&Handle],
+        transaction_hash: &Option<Handle>,
     ) -> PrimitiveDateTime {
+        let mut bucket_cache = self.bucket_cache.write().await;
+        // If the transaction ID is a hit in the cache, update its
+        // last use and add the output handle in the bucket
+        if let Some(txh) = transaction_hash {
+            if let Some(ce) = bucket_cache.get(txh).cloned() {
+                bucket_cache.put(*output, ce);
+                return ce;
+            }
+        }
         // If any input dependence is a match, return its bucket. This
         // computation is in a connected component with other ops in
         // this bucket
-        let mut bucket_cache = self.bucket_cache.write().await;
         for d in dependencies {
             // We peek here as the reuse is less likely than the use
             // of the new handle which we add - because handles
             // operate under single assinment
             if let Some(ce) = bucket_cache.peek(*d).cloned() {
                 bucket_cache.put(*output, ce);
+                // As the transaction hash was not in the cache, add
+                // it to this bucket as well
+                if let Some(txh) = transaction_hash {
+                    bucket_cache.put(*txh, ce);
+                }
                 return ce;
             }
         }
         // If this computation is not linked to any others, assign it
-        // to a new empty bucket
+        // to a new empty bucket and add output handle and transaction
+        // hash where relevant
         let t = OffsetDateTime::now_utc();
         let t = PrimitiveDateTime::new(t.date(), t.time());
         bucket_cache.put(*output, t);
+        if let Some(txh) = transaction_hash {
+            bucket_cache.put(*txh, t);
+        }
         t
     }
 

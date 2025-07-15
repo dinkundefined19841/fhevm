@@ -8,7 +8,9 @@ use fhevm_listener::database::tfhe_event_propagate::{
 };
 
 use crate::tests::operators::{generate_binary_test_cases, generate_unary_test_cases};
-use crate::tests::utils::{decrypt_ciphertexts, wait_until_all_ciphertexts_computed};
+use crate::tests::utils::{
+    allow_handle, decrypt_ciphertexts, wait_until_all_allowed_handles_computed,
+};
 use crate::tests::utils::{default_api_key, setup_test_app, TestInstance};
 
 use crate::tests::operators::BinaryOperatorTestCase;
@@ -263,6 +265,7 @@ async fn test_fhe_binary_operands_events() -> Result<(), Box<dyn std::error::Err
         let lhs_handle = next_handle();
         let rhs_handle = next_handle();
         let output_handle = next_handle();
+        let transaction_id = next_handle();
 
         let lhs_bytes = as_scalar_uint(&op.lhs);
         let rhs_bytes = as_scalar_uint(&op.rhs);
@@ -286,8 +289,8 @@ async fn test_fhe_binary_operands_events() -> Result<(), Box<dyn std::error::Err
             block_hash: None,
             block_number: None,
             block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
+            transaction_hash: Some(transaction_id),
+            transaction_index: Some(0),
             log_index: None,
             removed: false,
         };
@@ -306,8 +309,8 @@ async fn test_fhe_binary_operands_events() -> Result<(), Box<dyn std::error::Err
                 block_hash: None,
                 block_number: None,
                 block_timestamp: None,
-                transaction_hash: Some(as_handle(&BigInt::from(77))),
-                transaction_index: Some(77),
+                transaction_hash: Some(transaction_id),
+                transaction_index: Some(0),
                 log_index: None,
                 removed: false,
             };
@@ -320,17 +323,18 @@ async fn test_fhe_binary_operands_events() -> Result<(), Box<dyn std::error::Err
             block_hash: None,
             block_number: None,
             block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
+            transaction_hash: Some(transaction_id),
+            transaction_index: Some(0),
             log_index: None,
             removed: false,
         };
         listener_event_to_db.insert_tfhe_event(&log).await?;
+        allow_handle(&output_handle.to_vec(), &pool).await?;
 
         cases.push((op, output_handle));
     }
 
-    wait_until_all_ciphertexts_computed(&app).await?;
+    wait_until_all_allowed_handles_computed(&app).await?;
     for (op, output_handle) in cases {
         let decrypt_request = vec![output_handle.to_vec()];
         let resp = decrypt_ciphertexts(&pool, 1, decrypt_request).await?;
@@ -403,6 +407,7 @@ async fn test_fhe_unary_operands_events() -> Result<(), Box<dyn std::error::Erro
         }
         let input_handle = next_handle();
         let output_handle = next_handle();
+        let transaction_id = next_handle();
 
         let inp_bytes = as_scalar_uint(&op.inp);
 
@@ -426,8 +431,8 @@ async fn test_fhe_unary_operands_events() -> Result<(), Box<dyn std::error::Erro
             block_hash: None,
             block_number: None,
             block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
+            transaction_hash: Some(transaction_id),
+            transaction_index: Some(0),
             log_index: None,
             removed: false,
         };
@@ -441,13 +446,14 @@ async fn test_fhe_unary_operands_events() -> Result<(), Box<dyn std::error::Erro
             block_hash: None,
             block_number: None,
             block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
+            transaction_hash: Some(transaction_id),
+            transaction_index: Some(0),
             log_index: None,
             removed: false,
         };
         listener_event_to_db.insert_tfhe_event(&log).await?;
-        wait_until_all_ciphertexts_computed(&app).await?;
+        allow_handle(&output_handle.to_vec(), &pool).await?;
+        wait_until_all_allowed_handles_computed(&app).await?;
 
         let decrypt_request = vec![output_handle.to_vec()];
         let resp = decrypt_ciphertexts(&pool, 1, decrypt_request).await?;
@@ -483,6 +489,7 @@ async fn test_fhe_if_then_else_events() -> Result<(), Box<dyn std::error::Error>
         .await?;
     let mut listener_event_to_db = listener_event_to_db(&app).await;
 
+    let transaction_id = next_handle();
     let fhe_bool_type = 0;
     let false_handle = next_handle();
     let true_handle = next_handle();
@@ -502,11 +509,12 @@ async fn test_fhe_if_then_else_events() -> Result<(), Box<dyn std::error::Error>
         block_hash: None,
         block_number: None,
         block_timestamp: None,
-        transaction_hash: Some(as_handle(&BigInt::from(77))),
-        transaction_index: Some(77),
+        transaction_hash: Some(transaction_id),
+        transaction_index: Some(0),
         log_index: None,
         removed: false,
     };
+    allow_handle(&false_handle.to_vec(), &pool).await?;
     listener_event_to_db.insert_tfhe_event(&log).await?;
 
     let log = alloy::rpc::types::Log {
@@ -521,16 +529,15 @@ async fn test_fhe_if_then_else_events() -> Result<(), Box<dyn std::error::Error>
         block_hash: None,
         block_number: None,
         block_timestamp: None,
-        transaction_hash: Some(as_handle(&BigInt::from(77))),
-        transaction_index: Some(77),
+        transaction_hash: Some(transaction_id),
+        transaction_index: Some(0),
         log_index: None,
         removed: false,
     };
+    allow_handle(&true_handle.to_vec(), &pool).await?;
     listener_event_to_db.insert_tfhe_event(&log).await?;
 
     for input_types in supported_types() {
-        let left_handle = next_handle();
-        let right_handle = next_handle();
         let is_input_bool = *input_types == fhe_bool_type;
         let (left_input, right_input) = if is_input_bool {
             (BigInt::from(0), BigInt::from(1))
@@ -538,45 +545,48 @@ async fn test_fhe_if_then_else_events() -> Result<(), Box<dyn std::error::Error>
             (BigInt::from(7), BigInt::from(12))
         };
 
-        let log = alloy::rpc::types::Log {
-            inner: tfhe_event(TfheContractEvents::TrivialEncrypt(
-                TfheContract::TrivialEncrypt {
-                    caller,
-                    pt: as_scalar_uint(&left_input),
-                    toType: to_ty(*input_types),
-                    result: left_handle,
-                },
-            )),
-            block_hash: None,
-            block_number: None,
-            block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
-            log_index: None,
-            removed: false,
-        };
-        listener_event_to_db.insert_tfhe_event(&log).await?;
-
-        let log = alloy::rpc::types::Log {
-            inner: tfhe_event(TfheContractEvents::TrivialEncrypt(
-                TfheContract::TrivialEncrypt {
-                    caller,
-                    pt: as_scalar_uint(&right_input),
-                    toType: to_ty(*input_types),
-                    result: right_handle,
-                },
-            )),
-            block_hash: None,
-            block_number: None,
-            block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
-            log_index: None,
-            removed: false,
-        };
-        listener_event_to_db.insert_tfhe_event(&log).await?;
-
         for test_value in [false, true] {
+            let left_handle = next_handle();
+            let right_handle = next_handle();
+            let transaction_id = next_handle();
+            let log = alloy::rpc::types::Log {
+                inner: tfhe_event(TfheContractEvents::TrivialEncrypt(
+                    TfheContract::TrivialEncrypt {
+                        caller,
+                        pt: as_scalar_uint(&left_input),
+                        toType: to_ty(*input_types),
+                        result: left_handle,
+                    },
+                )),
+                block_hash: None,
+                block_number: None,
+                block_timestamp: None,
+                transaction_hash: Some(transaction_id),
+                transaction_index: Some(0),
+                log_index: None,
+                removed: false,
+            };
+            listener_event_to_db.insert_tfhe_event(&log).await?;
+
+            let log = alloy::rpc::types::Log {
+                inner: tfhe_event(TfheContractEvents::TrivialEncrypt(
+                    TfheContract::TrivialEncrypt {
+                        caller,
+                        pt: as_scalar_uint(&right_input),
+                        toType: to_ty(*input_types),
+                        result: right_handle,
+                    },
+                )),
+                block_hash: None,
+                block_number: None,
+                block_timestamp: None,
+                transaction_hash: Some(transaction_id),
+                transaction_index: Some(0),
+                log_index: None,
+                removed: false,
+            };
+            listener_event_to_db.insert_tfhe_event(&log).await?;
+
             let output_handle = next_handle();
             let (expected_result, input_handle) = if test_value {
                 (&left_input, &true_handle)
@@ -602,13 +612,14 @@ async fn test_fhe_if_then_else_events() -> Result<(), Box<dyn std::error::Error>
                 block_hash: None,
                 block_number: None,
                 block_timestamp: None,
-                transaction_hash: Some(as_handle(&BigInt::from(77))),
-                transaction_index: Some(77),
+                transaction_hash: Some(transaction_id),
+                transaction_index: Some(0),
                 log_index: None,
                 removed: false,
             };
+            allow_handle(&output_handle.to_vec(), &pool).await?;
             listener_event_to_db.insert_tfhe_event(&log).await?;
-            wait_until_all_ciphertexts_computed(&app).await?;
+            wait_until_all_allowed_handles_computed(&app).await?;
             let decrypt_request = vec![output_handle.to_vec()];
             let resp = decrypt_ciphertexts(&pool, 1, decrypt_request).await?;
             let decr_response = &resp[0];
@@ -627,7 +638,7 @@ async fn test_fhe_if_then_else_events() -> Result<(), Box<dyn std::error::Error>
             );
         }
     }
-    wait_until_all_ciphertexts_computed(&app).await?;
+    wait_until_all_allowed_handles_computed(&app).await?;
 
     Ok(())
 }
@@ -650,6 +661,7 @@ async fn test_fhe_cast_events() -> Result<(), Box<dyn std::error::Error>> {
         for type_to in supported_types() {
             let input_handle = next_handle();
             let output_handle = next_handle();
+            let transaction_id = next_handle();
             let input = 7;
             let output = if *type_to == fhe_bool || *type_from == fhe_bool {
                 // if bool output is 1
@@ -674,8 +686,8 @@ async fn test_fhe_cast_events() -> Result<(), Box<dyn std::error::Error>> {
                 block_hash: None,
                 block_number: None,
                 block_timestamp: None,
-                transaction_hash: Some(as_handle(&BigInt::from(77))),
-                transaction_index: Some(77),
+                transaction_hash: Some(transaction_id),
+                transaction_index: Some(0),
                 log_index: None,
                 removed: false,
             };
@@ -691,14 +703,15 @@ async fn test_fhe_cast_events() -> Result<(), Box<dyn std::error::Error>> {
                 block_hash: None,
                 block_number: None,
                 block_timestamp: None,
-                transaction_hash: Some(as_handle(&BigInt::from(77))),
-                transaction_index: Some(77),
+                transaction_hash: Some(transaction_id),
+                transaction_index: Some(0),
                 log_index: None,
                 removed: false,
             };
             listener_event_to_db.insert_tfhe_event(&log).await?;
+            allow_handle(&output_handle.to_vec(), &pool).await?;
 
-            wait_until_all_ciphertexts_computed(&app).await?;
+            wait_until_all_allowed_handles_computed(&app).await?;
             let decrypt_request = vec![output_handle.to_vec()];
             let resp = decrypt_ciphertexts(&pool, 1, decrypt_request).await?;
             let decr_response = &resp[0];
@@ -740,6 +753,7 @@ async fn test_fhe_rand_events() -> Result<(), Box<dyn std::error::Error>> {
         let output1_handle = next_handle();
         let output2_handle = next_handle();
         let output3_handle = next_handle();
+        let transaction_id = next_handle();
 
         let caller = "0x0000000000000000000000000000000000000000"
             .parse()
@@ -754,12 +768,13 @@ async fn test_fhe_rand_events() -> Result<(), Box<dyn std::error::Error>> {
             block_hash: None,
             block_number: None,
             block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
+            transaction_hash: Some(transaction_id),
+            transaction_index: Some(0),
             log_index: None,
             removed: false,
         };
         listener_event_to_db.insert_tfhe_event(&log).await?;
+        allow_handle(&output1_handle.to_vec(), &pool).await?;
 
         let log = alloy::rpc::types::Log {
             inner: tfhe_event(TfheContractEvents::FheRand(TfheContract::FheRand {
@@ -773,12 +788,13 @@ async fn test_fhe_rand_events() -> Result<(), Box<dyn std::error::Error>> {
             block_hash: None,
             block_number: None,
             block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
+            transaction_hash: Some(transaction_id),
+            transaction_index: Some(0),
             log_index: None,
             removed: false,
         };
         listener_event_to_db.insert_tfhe_event(&log).await?;
+        allow_handle(&output2_handle.to_vec(), &pool).await?;
 
         let log = alloy::rpc::types::Log {
             inner: tfhe_event(TfheContractEvents::FheRandBounded(
@@ -796,14 +812,15 @@ async fn test_fhe_rand_events() -> Result<(), Box<dyn std::error::Error>> {
             block_hash: None,
             block_number: None,
             block_timestamp: None,
-            transaction_hash: Some(as_handle(&BigInt::from(77))),
-            transaction_index: Some(77),
+            transaction_hash: Some(transaction_id),
+            transaction_index: Some(0),
             log_index: None,
             removed: false,
         };
         listener_event_to_db.insert_tfhe_event(&log).await?;
+        allow_handle(&output3_handle.to_vec(), &pool).await?;
 
-        wait_until_all_ciphertexts_computed(&app).await?;
+        wait_until_all_allowed_handles_computed(&app).await?;
 
         let decrypt_request = vec![
             output1_handle.to_vec(),

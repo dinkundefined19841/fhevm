@@ -12,8 +12,8 @@ use crate::{
         },
     },
     tests::utils::{
-        decrypt_ciphertexts, default_api_key, random_handle, setup_test_app,
-        wait_until_all_ciphertexts_computed, DecryptionResult,
+        allow_handle, decrypt_ciphertexts, default_api_key, random_handle, setup_test_app,
+        wait_until_all_allowed_handles_computed, DecryptionResult,
     },
 };
 
@@ -60,7 +60,7 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheRand.into(),
-            output_handle,
+            output_handle: output_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
                     input: Some(Input::Scalar(vec![deterministic_seed])),
@@ -70,6 +70,7 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
                 },
             ],
         });
+        allow_handle(&output_handle, &pool).await?;
     }
 
     for the_type in random_test_types {
@@ -78,7 +79,7 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheRand.into(),
-            output_handle,
+            output_handle: output_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
                     input: Some(Input::Scalar(vec![deterministic_seed])),
@@ -88,6 +89,7 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
                 },
             ],
         });
+        allow_handle(&output_handle, &pool).await?;
     }
 
     let deterministic_seed = 124u8;
@@ -97,7 +99,7 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheRand.into(),
-            output_handle,
+            output_handle: output_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
                     input: Some(Input::Scalar(vec![deterministic_seed])),
@@ -107,6 +109,7 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
                 },
             ],
         });
+        allow_handle(&output_handle, &pool).await?;
     }
     println!("Scheduling computations...");
     let mut compute_request = tonic::Request::new(AsyncComputeRequest {
@@ -119,7 +122,7 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
     let _resp = client.async_compute(compute_request).await?;
     println!("Computations scheduled, waiting upon completion...");
 
-    wait_until_all_ciphertexts_computed(&app).await?;
+    wait_until_all_allowed_handles_computed(&app).await?;
 
     let decrypt_request = output_handles.clone();
     let resp = decrypt_ciphertexts(&pool, 1, decrypt_request).await?;
@@ -271,7 +274,7 @@ async fn test_fhe_random_bounded() -> Result<(), Box<dyn std::error::Error>> {
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheRandBounded.into(),
-            output_handle,
+            output_handle: output_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
                     input: Some(Input::Scalar(vec![deterministic_seed])),
@@ -284,6 +287,7 @@ async fn test_fhe_random_bounded() -> Result<(), Box<dyn std::error::Error>> {
                 },
             ],
         });
+        allow_handle(&output_handle, &pool).await?;
     }
 
     println!("Scheduling computations...");
@@ -297,7 +301,7 @@ async fn test_fhe_random_bounded() -> Result<(), Box<dyn std::error::Error>> {
     let _resp = client.async_compute(compute_request).await?;
     println!("Computations scheduled, waiting upon completion...");
 
-    wait_until_all_ciphertexts_computed(&app).await?;
+    wait_until_all_allowed_handles_computed(&app).await?;
 
     let decrypt_request = output_handles.clone();
     let resp = decrypt_ciphertexts(&pool, 1, decrypt_request).await?;
