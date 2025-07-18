@@ -410,7 +410,7 @@ async fn tfhe_worker_cycle(
 
                 let finished_work_unit: Result<
                     _,
-                    (Box<(dyn std::error::Error + Send + Sync)>, i32, Vec<u8>),
+                    (Box<dyn std::error::Error + Send + Sync>, i32, Vec<u8>),
                 > = r
                     .as_mut()
                     .map(|rok| {

@@ -393,7 +393,7 @@ impl CoprocessorService {
             let mut blocking_span = tracer.child_span("blocking_ciphertext_list_expand");
             blocking_span.set_attributes(vec![KeyValue::new("idx", idx as i64)]);
             tfhe_work_set.spawn_blocking(
-                move || -> Result<_, (Box<(dyn std::error::Error + Send + Sync)>, usize)> {
+                move || -> Result<_, (Box<dyn std::error::Error + Send + Sync>, usize)> {
                     let mut span = tracer.child_span("set_server_key");
                     tfhe::set_server_key(server_key.clone());
                     span.end();
@@ -409,7 +409,7 @@ impl CoprocessorService {
                     let expanded =
                         try_expand_ciphertext_list(&cloned_input.input_payload, &public_params)
                             .map_err(|e| {
-                                let err: Box<(dyn std::error::Error + Send + Sync)> = Box::new(e);
+                                let err: Box<dyn std::error::Error + Send + Sync> = Box::new(e);
                                 (err, idx)
                             })?;
 
@@ -432,7 +432,7 @@ impl CoprocessorService {
         while let Some(output) = tfhe_work_set.join_next().await {
             let (cts, idx, hash) = output
                 .map_err(|e| {
-                    let err: Box<(dyn std::error::Error + Sync + Send)> = Box::new(e);
+                    let err: Box<dyn std::error::Error + Sync + Send> = Box::new(e);
                     tonic::Status::from_error(err)
                 })?
                 .map_err(|e| tonic::Status::from_error(e.0))?;
@@ -696,9 +696,10 @@ impl CoprocessorService {
                         fhe_operation,
                         is_completed,
                         is_scalar,
-                        schedule_order
+                        schedule_order,
+                        transaction_id
                     )
-                    VALUES($1, $2, $3, $4, false, $5, $6)
+                    VALUES($1, $2, $3, $4, false, $5, $6, $7)
                     ON CONFLICT (tenant_id, output_handle) DO NOTHING
                 ",
                 tenant_id,
@@ -706,7 +707,8 @@ impl CoprocessorService {
                 &computations_inputs[idx],
                 fhe_operation,
                 are_comps_scalar[idx],
-                computation_buckets[idx]
+                computation_buckets[idx],
+                comp.transaction_id
             )
             .execute(trx.as_mut())
             .await

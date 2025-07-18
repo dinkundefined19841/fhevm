@@ -55,11 +55,13 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
 
     let deterministic_seed = 123u8;
     for the_type in random_test_types {
+        let transaction_id = next_handle();
         let output_handle = next_handle();
         output_handles.push(output_handle.clone());
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheRand.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: output_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -74,11 +76,13 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     for the_type in random_test_types {
+        let transaction_id = next_handle();
         let output_handle = next_handle();
         repeated_output_handles.push(output_handle.clone());
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheRand.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: output_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -94,11 +98,13 @@ async fn test_fhe_random_basic() -> Result<(), Box<dyn std::error::Error>> {
 
     let deterministic_seed = 124u8;
     for the_type in random_test_types {
+        let transaction_id = next_handle();
         let output_handle = next_handle();
         other_seed_output_handles.push(output_handle.clone());
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheRand.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: output_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -269,11 +275,13 @@ async fn test_fhe_random_bounded() -> Result<(), Box<dyn std::error::Error>> {
     ];
 
     for (idx, the_type) in random_test_supported_types().iter().enumerate() {
+        let transaction_id = next_handle();
         let output_handle = next_handle();
         output_handles.push(output_handle.clone());
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheRandBounded.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: output_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {

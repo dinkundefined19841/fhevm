@@ -160,11 +160,13 @@ async fn counter_increment(
     };
 
     for _ in 0..=(num_samples - 1) as u32 {
+        let transaction_id = next_handle();
         let new_counter = next_handle();
         output_handles.push(new_counter.clone());
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheAdd.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_counter.clone(),
             inputs: vec![
                 counter.clone(),
@@ -304,6 +306,7 @@ async fn tree_reduction(
         });
     }
     let mut output_handle = next_handle();
+    let transaction_id = next_handle();
     for _ in 0..num_levels {
         for i in 0..num_comps_at_level {
             output_handle = next_handle();
@@ -312,6 +315,7 @@ async fn tree_reduction(
             });
             async_computations.push(AsyncComputation {
                 operation: FheOperation::FheAdd.into(),
+                transaction_id: transaction_id.clone(),
                 output_handle: output_handle.clone(),
                 inputs: vec![level_inputs[2 * i].clone(), level_inputs[2 * i + 1].clone()],
             });

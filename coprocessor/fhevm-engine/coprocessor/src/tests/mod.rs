@@ -35,6 +35,7 @@ async fn test_smoke() -> Result<(), Box<dyn std::error::Error>> {
     let api_key_header = format!("bearer {}", default_api_key());
     let ct_type = 4; // i32
 
+    let transaction_id = random_handle().to_be_bytes();
     let h1 = random_handle().to_be_bytes();
     let h2 = random_handle().to_be_bytes();
     let h3 = random_handle().to_be_bytes();
@@ -72,6 +73,7 @@ async fn test_smoke() -> Result<(), Box<dyn std::error::Error>> {
             computations: vec![
                 AsyncComputation {
                     operation: FheOperation::FheAdd.into(),
+                    transaction_id: transaction_id.to_vec(),
                     output_handle: h3.to_vec(),
                     inputs: vec![
                         AsyncComputationInput {
@@ -84,6 +86,7 @@ async fn test_smoke() -> Result<(), Box<dyn std::error::Error>> {
                 },
                 AsyncComputation {
                     operation: FheOperation::FheAdd.into(),
+                    transaction_id: transaction_id.to_vec(),
                     output_handle: h4.to_vec(),
                     inputs: vec![
                         AsyncComputationInput {

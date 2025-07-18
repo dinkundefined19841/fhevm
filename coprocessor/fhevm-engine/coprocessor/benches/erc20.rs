@@ -185,6 +185,7 @@ async fn schedule_erc20_whitepaper(
     assert_eq!(first_resp.input_handles.len(), 3);
 
     for _ in 0..=(num_samples - 1) as u32 {
+        let transaction_id = next_handle();
         let handle_bals = first_resp.input_handles[0].handle.clone();
         let bals = AsyncComputationInput {
             input: Some(Input::InputHandle(handle_bals.clone())),
@@ -211,16 +212,19 @@ async fn schedule_erc20_whitepaper(
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheGe.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: has_enough_funds_handle.clone(),
             inputs: vec![bals.clone(), trxa.clone()],
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheAdd.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_to_amount_target_handle.clone(),
             inputs: vec![bald.clone(), trxa.clone()],
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheIfThenElse.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_to_amount_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -234,11 +238,13 @@ async fn schedule_erc20_whitepaper(
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheSub.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_from_amount_target_handle.clone(),
             inputs: vec![bals.clone(), trxa.clone()],
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheIfThenElse.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_from_amount_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -365,6 +371,7 @@ async fn schedule_erc20_no_cmux(
     assert_eq!(first_resp.input_handles.len(), 3);
 
     for _ in 0..=(num_samples - 1) as u32 {
+        let transaction_id = next_handle();
         let handle_bals = first_resp.input_handles[0].handle.clone();
         let bals = AsyncComputationInput {
             input: Some(Input::InputHandle(handle_bals.clone())),
@@ -391,11 +398,13 @@ async fn schedule_erc20_no_cmux(
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheGe.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: has_enough_funds_handle.clone(),
             inputs: vec![bals.clone(), trxa.clone()],
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheCast.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: cast_has_enough_funds_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -408,6 +417,7 @@ async fn schedule_erc20_no_cmux(
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheMul.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: select_amount_handle.clone(),
             inputs: vec![
                 trxa.clone(),
@@ -418,6 +428,7 @@ async fn schedule_erc20_no_cmux(
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheAdd.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_to_amount_handle.clone(),
             inputs: vec![
                 bald.clone(),
@@ -428,6 +439,7 @@ async fn schedule_erc20_no_cmux(
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheSub.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_from_amount_handle.clone(),
             inputs: vec![
                 bals.clone(),
@@ -577,6 +589,7 @@ async fn schedule_dependent_erc20_whitepaper(
     assert_eq!(first_resp.input_handles.len(), 2);
 
     for _ in 0..=(num_samples - 1) as u32 {
+        let transaction_id = next_handle();
         let handle_bals = first_resp.input_handles[0].handle.clone();
         let bals = AsyncComputationInput {
             input: Some(Input::InputHandle(handle_bals.clone())),
@@ -599,16 +612,19 @@ async fn schedule_dependent_erc20_whitepaper(
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheGe.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: has_enough_funds_handle.clone(),
             inputs: vec![bals.clone(), trxa.clone()],
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheAdd.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_to_amount_target_handle.clone(),
             inputs: vec![bald.clone(), trxa.clone()],
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheIfThenElse.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_to_amount_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -622,11 +638,13 @@ async fn schedule_dependent_erc20_whitepaper(
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheSub.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_from_amount_target_handle.clone(),
             inputs: vec![bals.clone(), trxa.clone()],
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheIfThenElse.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_from_amount_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -784,6 +802,7 @@ async fn schedule_dependent_erc20_no_cmux(
     assert_eq!(first_resp.input_handles.len(), 2);
 
     for _ in 0..=(num_samples - 1) as u32 {
+        let transaction_id = next_handle();
         let handle_bals = first_resp.input_handles[0].handle.clone();
         let bals = AsyncComputationInput {
             input: Some(Input::InputHandle(handle_bals.clone())),
@@ -806,11 +825,13 @@ async fn schedule_dependent_erc20_no_cmux(
 
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheGe.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: has_enough_funds_handle.clone(),
             inputs: vec![bals.clone(), trxa.clone()],
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheCast.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: cast_has_enough_funds_handle.clone(),
             inputs: vec![
                 AsyncComputationInput {
@@ -823,6 +844,7 @@ async fn schedule_dependent_erc20_no_cmux(
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheMul.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: select_amount_handle.clone(),
             inputs: vec![
                 trxa.clone(),
@@ -833,6 +855,7 @@ async fn schedule_dependent_erc20_no_cmux(
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheAdd.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_to_amount_handle.clone(),
             inputs: vec![
                 bald.clone(),
@@ -843,6 +866,7 @@ async fn schedule_dependent_erc20_no_cmux(
         });
         async_computations.push(AsyncComputation {
             operation: FheOperation::FheSub.into(),
+            transaction_id: transaction_id.clone(),
             output_handle: new_from_amount_handle.clone(),
             inputs: vec![
                 bals.clone(),
