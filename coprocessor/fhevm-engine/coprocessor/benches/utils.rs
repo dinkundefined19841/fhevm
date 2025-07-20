@@ -92,7 +92,7 @@ async fn start_coprocessor(rx: Receiver<bool>, app_port: u16, db_url: &str) {
         server_maximum_ciphertexts_to_schedule: 20000,
         server_maximum_ciphertexts_to_get: 20000,
         work_items_batch_size: ecfg.batch_size,
-        dependence_chains_per_worker: 100,
+        dependence_chains_per_worker: 2000,
         tenant_key_cache_size: 4,
         coprocessor_fhe_threads: 128,
         maximum_handles_per_input: 255,
@@ -832,7 +832,7 @@ impl EnvConfig {
         };
         let batch_size: i32 = match env::var("BENCHMARK_BATCH_SIZE") {
             Ok(val) => val.parse::<i32>().unwrap(),
-            Err(_) => 400,
+            Err(_) => 4000,
         };
         let scheduling_policy: String = match env::var("FHEVM_DF_SCHEDULE") {
             Ok(val) => val,

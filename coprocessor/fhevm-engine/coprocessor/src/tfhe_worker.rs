@@ -118,37 +118,30 @@ async fn tfhe_worker_cycle(
         let the_work = query!(
             "
             WITH selected_computations AS (
-              -- Get set of complete transactions 
+              -- Get set of complete transactions
               SELECT c.tenant_id, c.output_handle, c.transaction_id, ah.handle
               FROM computations c LEFT JOIN allowed_handles ah ON c.output_handle = ah.handle
               WHERE ( c.is_completed = false
               AND c.is_error = false
               AND c.transaction_id IS NULL )
               OR c.transaction_id IN (
-                SELECT DISTINCT transaction_id FROM computations
-                WHERE schedule_order IN ( 
+                -- Select full transactions out of the buckets we identified below
+                SELECT transaction_id FROM computations
+                WHERE is_completed = false
+                AND is_error = false
+                AND schedule_order IN (
                   WITH schedules AS (
-                    -- Find immediately computable computations
+                    -- Find oldest uncomputed computations and get their buckets
                     SELECT schedule_order
                     FROM computations
                     WHERE is_completed = false
                     AND is_error = false
-                    AND NOT EXISTS (
-                      SELECT 1
-                      FROM unnest(dependencies) WITH ORDINALITY AS elems(v, dep_index)
-                      WHERE (tenant_id, elems.v) NOT IN ( SELECT tenant_id, handle FROM ciphertexts )
-                      -- don't select scalar operands
-                      AND (
-                        NOT is_scalar
-                        OR is_scalar AND NOT elems.dep_index = 2
-                      )
-                      -- ignore fhe random, trivial encrypt operations, all inputs are scalars
-                      AND NOT fhe_operation = ANY(ARRAY[24, 26, 27])
-                    )
                     ORDER BY created_at
+                    LIMIT $2
                   )
-                  SELECT DISTINCT schedule_order FROM schedules LIMIT $2
+                  SELECT DISTINCT schedule_order FROM schedules
                 )
+                ORDER BY created_at
                 LIMIT $1
               )
             )

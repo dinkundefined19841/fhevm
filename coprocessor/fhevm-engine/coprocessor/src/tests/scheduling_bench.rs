@@ -639,6 +639,7 @@ async fn counter_increment() -> Result<(), Box<dyn std::error::Error>> {
     let first_resp = &resp.upload_responses[0];
     assert_eq!(first_resp.input_handles.len(), 1);
     let handle_counter = first_resp.input_handles[0].handle.clone();
+    allow_handle(&handle_counter, &pool).await?;
     let mut counter = AsyncComputationInput {
         input: Some(Input::InputHandle(handle_counter.clone())),
     };

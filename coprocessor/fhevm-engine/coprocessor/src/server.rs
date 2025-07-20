@@ -912,14 +912,14 @@ async fn sort_computation_into_bucket(
     };
     let mut res: Vec<PrimitiveDateTime> = vec![PrimitiveDateTime::MIN; computations.len()];
     let mut cache: HashMap<Vec<u8>, PrimitiveDateTime> = HashMap::with_capacity(computations.len());
-    for (idx, comp) in computations.iter().enumerate() {
+    'comps: for (idx, comp) in computations.iter().enumerate() {
         let output = &comp.output_handle;
         for ih in comp.inputs.iter() {
             if let Some(Input::InputHandle(input)) = &ih.input {
                 if let Some(ce) = cache.get(input).cloned() {
                     cache.insert(output.to_owned(), ce);
                     res[idx] = ce;
-                    break;
+                    continue 'comps;
                 }
             }
         }
