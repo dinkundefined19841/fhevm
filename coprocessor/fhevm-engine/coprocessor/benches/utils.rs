@@ -310,8 +310,8 @@ pub mod shortint_utils {
     use tfhe::shortint::parameters::list_compression::CompressionParameters;
     use tfhe::shortint::parameters::ShortintKeySwitchingParameters;
     use tfhe::shortint::{
-        AtomicPatternParameters, CarryModulus, ClassicPBSParameters, MessageModulus, MultiBitPBSParameters, PBSParameters,
-        ShortintParameterSet,
+        AtomicPatternParameters, CarryModulus, ClassicPBSParameters, MessageModulus,
+        MultiBitPBSParameters, PBSParameters, ShortintParameterSet,
     };
 
     /// An iterator that yields a succession of combinations
@@ -377,7 +377,7 @@ pub mod shortint_utils {
             }
         }
     }
-    
+
     impl From<ShortintKeySwitchingParameters> for CryptoParametersRecord<u64> {
         fn from(params: ShortintKeySwitchingParameters) -> Self {
             CryptoParametersRecord {
