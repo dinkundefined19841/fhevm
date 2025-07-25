@@ -27,7 +27,6 @@ use opentelemetry::trace::{Span, TraceContextExt, Tracer};
 use opentelemetry::KeyValue;
 use prometheus::{register_int_counter, IntCounter};
 use sha3::{Digest, Keccak256};
-use sqlx::types::time::{OffsetDateTime, PrimitiveDateTime};
 use sqlx::{query, Acquire};
 use tokio::task::spawn_blocking;
 use tonic::transport::Server;
@@ -668,7 +667,7 @@ impl CoprocessorService {
             are_comps_scalar.push(is_computation_scalar);
         }
 
-        let computation_buckets: Vec<PrimitiveDateTime> =
+        let computation_buckets: Vec<Vec<u8>> =
             sort_computation_into_bucket(&sorted_computations).await;
         let mut tx_span = tracer.child_span("db_transaction");
         let mut trx = self
@@ -696,7 +695,7 @@ impl CoprocessorService {
                         fhe_operation,
                         is_completed,
                         is_scalar,
-                        schedule_order,
+                        dependence_chain_id,
                         transaction_id
                     )
                     VALUES($1, $2, $3, $4, false, $5, $6, $7)
@@ -905,28 +904,24 @@ impl CoprocessorService {
 
 async fn sort_computation_into_bucket(
     computations: &[&crate::server::coprocessor::AsyncComputation],
-) -> Vec<PrimitiveDateTime> {
-    let t = || -> PrimitiveDateTime {
-        let t = OffsetDateTime::now_utc();
-        PrimitiveDateTime::new(t.date(), t.time())
-    };
-    let mut res: Vec<PrimitiveDateTime> = vec![PrimitiveDateTime::MIN; computations.len()];
-    let mut cache: HashMap<Vec<u8>, PrimitiveDateTime> = HashMap::with_capacity(computations.len());
+) -> Vec<Vec<u8>> {
+    let mut res: Vec<Vec<u8>> = vec![vec![0]; computations.len()];
+    let mut cache: HashMap<Vec<u8>, Vec<u8>> = HashMap::with_capacity(computations.len());
     'comps: for (idx, comp) in computations.iter().enumerate() {
         let output = &comp.output_handle;
         for ih in comp.inputs.iter() {
             if let Some(Input::InputHandle(input)) = &ih.input {
                 if let Some(ce) = cache.get(input).cloned() {
-                    cache.insert(output.to_owned(), ce);
+                    cache.insert(output.to_owned(), ce.to_owned());
                     res[idx] = ce;
                     continue 'comps;
                 }
             }
         }
         // If this computation is not linked to any others, assign it
-        // to a new empty bucket
-        res[idx] = t();
-        cache.insert(output.to_owned(), res[idx]);
+        // to a new bucket
+        res[idx] = output.to_owned();
+        cache.insert(output.to_owned(), res[idx].to_owned());
     }
     res
 }

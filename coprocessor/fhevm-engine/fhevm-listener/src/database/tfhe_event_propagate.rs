@@ -6,7 +6,6 @@ use fhevm_engine_common::types::SupportedFheOperations;
 use fhevm_engine_common::utils::compact_hex;
 use sqlx::postgres::PgConnectOptions;
 use sqlx::postgres::PgPoolOptions;
-use sqlx::types::time::{OffsetDateTime, PrimitiveDateTime};
 use sqlx::types::Uuid;
 use sqlx::Error as SqlxError;
 use sqlx::{PgPool, Postgres};
@@ -28,6 +27,8 @@ pub type ToType = u8;
 pub type ScalarByte = FixedBytes<1>;
 pub type ClearConst = Uint<256, 4>;
 
+const MINIMUM_BUCKET_CACHE_SIZE: u16 = 16;
+
 pub fn retry_on_sqlx_error(err: &SqlxError) -> bool {
     match err {
         SqlxError::Io(_)
@@ -46,9 +47,7 @@ pub struct Database {
     pool: sqlx::Pool<Postgres>,
     tenant_id: TenantId,
     chain_id: ChainId,
-    bucket_cache: std::sync::Arc<
-        tokio::sync::RwLock<lru::LruCache<Handle, PrimitiveDateTime>>,
-    >,
+    bucket_cache: tokio::sync::RwLock<lru::LruCache<Handle, Handle>>,
 }
 
 impl Database {
@@ -61,10 +60,13 @@ impl Database {
         let pool = Self::new_pool(url).await;
         let tenant_id =
             Self::find_tenant_id_or_panic(&pool, coprocessor_api_key).await;
-        let bucket_cache =
-            std::sync::Arc::new(tokio::sync::RwLock::new(lru::LruCache::new(
-                std::num::NonZeroU16::new(bucket_cache_size).unwrap().into(),
-            )));
+        let bucket_cache = tokio::sync::RwLock::new(lru::LruCache::new(
+            std::num::NonZeroU16::new(
+                bucket_cache_size.max(MINIMUM_BUCKET_CACHE_SIZE),
+            )
+            .unwrap()
+            .into(),
+        ));
         Database {
             url: url.into(),
             tenant_id,
@@ -208,7 +210,7 @@ impl Database {
         fhe_operation: FheOperation,
         scalar_byte: &FixedBytes<1>,
         log: &alloy::rpc::types::Log<TfheContractEvents>,
-        bucket: &PrimitiveDateTime,
+        bucket: &Handle,
     ) -> Result<(), SqlxError> {
         let is_scalar = !scalar_byte.is_zero();
         let output_handle = result.to_vec();
@@ -220,7 +222,7 @@ impl Database {
                 dependencies,
                 fhe_operation,
                 is_scalar,
-                schedule_order,
+                dependence_chain_id,
                 transaction_id
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -231,7 +233,7 @@ impl Database {
             &dependencies,
             fhe_operation as i16,
             is_scalar,
-            bucket,
+            bucket.to_vec(),
             if let Some(txh) = log.transaction_hash {
                 Some(txh.to_vec())
             } else {
@@ -246,43 +248,46 @@ impl Database {
         output: &Handle,
         dependencies: &[&Handle],
         transaction_hash: &Option<Handle>,
-    ) -> PrimitiveDateTime {
-        let mut bucket_cache = self.bucket_cache.write().await;
+    ) -> Handle {
         // If the transaction ID is a hit in the cache, update its
         // last use and add the output handle in the bucket
         if let Some(txh) = transaction_hash {
-            if let Some(ce) = bucket_cache.get(txh).cloned() {
-                bucket_cache.put(*output, ce);
+            // We need a write access here as get updates the LRUcache
+            let mut bucket_cache_write = self.bucket_cache.write().await;
+            if let Some(ce) = bucket_cache_write.get(txh).cloned() {
+                bucket_cache_write.put(*output, ce);
                 return ce;
             }
         }
         // If any input dependence is a match, return its bucket. This
         // computation is in a connected component with other ops in
         // this bucket
+        let bucket_cache_read = self.bucket_cache.read().await;
         for d in dependencies {
             // We peek here as the reuse is less likely than the use
             // of the new handle which we add - because handles
             // operate under single assinment
-            if let Some(ce) = bucket_cache.peek(*d).cloned() {
-                bucket_cache.put(*output, ce);
+            if let Some(ce) = bucket_cache_read.peek(*d).cloned() {
+                let mut bucket_cache_write = self.bucket_cache.write().await;
+                bucket_cache_write.put(*output, ce);
                 // As the transaction hash was not in the cache, add
                 // it to this bucket as well
                 if let Some(txh) = transaction_hash {
-                    bucket_cache.put(*txh, ce);
+                    bucket_cache_write.put(*txh, ce);
                 }
                 return ce;
             }
         }
+        drop(bucket_cache_read);
         // If this computation is not linked to any others, assign it
         // to a new empty bucket and add output handle and transaction
         // hash where relevant
-        let t = OffsetDateTime::now_utc();
-        let t = PrimitiveDateTime::new(t.date(), t.time());
-        bucket_cache.put(*output, t);
+        let mut bucket_cache_write = self.bucket_cache.write().await;
+        bucket_cache_write.put(*output, *output);
         if let Some(txh) = transaction_hash {
-            bucket_cache.put(*txh, t);
+            bucket_cache_write.put(*txh, *output);
         }
-        t
+        *output
     }
 
     #[rustfmt::skip]

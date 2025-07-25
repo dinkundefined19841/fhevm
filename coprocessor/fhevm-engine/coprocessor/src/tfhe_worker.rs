@@ -129,25 +129,25 @@ async fn tfhe_worker_cycle(
                 SELECT transaction_id FROM computations
                 WHERE is_completed = false
                 AND is_error = false
-                AND schedule_order IN (
-                  WITH schedules AS (
+                AND dependence_chain_id IN (
+                  WITH dep_chains AS (
                     -- Find oldest uncomputed computations and get their buckets
-                    SELECT schedule_order
+                    SELECT dependence_chain_id
                     FROM computations
                     WHERE is_completed = false
                     AND is_error = false
-                    ORDER BY created_at
+                    ORDER BY schedule_order
                     LIMIT $2
                   )
-                  SELECT DISTINCT schedule_order FROM schedules
+                  SELECT DISTINCT dependence_chain_id FROM dep_chains
                 )
-                ORDER BY created_at
+                ORDER BY schedule_order
                 LIMIT $1
               )
             )
             -- Acquire all computations from this transaction set
             SELECT c.tenant_id, c.output_handle, c.dependencies, c.fhe_operation, c.is_scalar,
-                   sc.handle IS NOT NULL AS is_allowed, c.schedule_order,
+                   sc.handle IS NOT NULL AS is_allowed, c.dependence_chain_id,
                    COALESCE(c.transaction_id) as transaction_id
             FROM computations c, selected_computations sc
             WHERE c.tenant_id = sc.tenant_id
@@ -385,12 +385,25 @@ async fn tfhe_worker_cycle(
                 // Filter out computations that could not complete
                 if uncomputable.contains_key(&idx) {
                     // Update timestamp of uncomputable computation
-                    let mut s = tracer.start_with_context("unschedulable_computation", &loop_ctx);
+                    let mut s =
+                        tracer.start_with_context("update_unschedulable_computation", &loop_ctx);
                     s.set_attribute(KeyValue::new("tenant_id", w.tenant_id as i64));
                     s.set_attribute(KeyValue::new(
                         "handle",
                         format!("0x{}", hex::encode(&w.output_handle)),
                     ));
+                    let _ = query!(
+                        "
+                            UPDATE computations
+                            SET schedule_order = CURRENT_TIMESTAMP
+                            WHERE tenant_id = $1
+                            AND output_handle = $2
+                        ",
+                        w.tenant_id,
+                        w.output_handle
+                    )
+                    .execute(trx.as_mut())
+                    .await?;
                     s.end();
                     continue;
                 }
